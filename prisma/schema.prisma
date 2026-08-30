@@ -1,0 +1,113 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// ==========================================
+// ENUMS
+// ==========================================
+
+enum UserRole {
+  ADMIN
+  APPLICANT
+}
+
+enum ApplicationStatus {
+  SUBMITTED      // Application received by the system
+  UNDER_REVIEW   // Recruiter is evaluating the resume
+  SCREENED       // Passed initial screening (like an HR call or written test)
+  SHORTLISTED    // Handpicked as a top candidate for the role
+  INTERVIEWING   // Currently going through live interview rounds
+  HIRED          // PASSED: Candidate successfully accepted the job offer!
+  REJECTED       // FAILED: Process ended; not selected for the role
+}
+
+enum MatchRating {
+  HIGH
+  MEDIUM
+  LOW
+  UNQUALIFIED
+}
+
+// ==========================================
+// MODELS
+// ==========================================
+
+model User {
+  id            String     @id @default(cuid())
+  name          String?
+  email         String?    @unique
+  emailVerified DateTime?
+  image         String?
+  password      String?    // Hashed credentials password for recruiters/admins
+  role          UserRole   @default(APPLICANT)
+  candidate     Candidate? // 1-to-1 optional link to business profile if user is an applicant
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+}
+
+model JobPosting {
+  id             String        @id @default(cuid())
+  title          String
+  departments    String[]      // Multi-department tagging: e.g. ["IT", "Engineering"]
+  description    String        @db.Text
+  minYearsExp    Int           @default(0)
+  requiredSkills String[]
+  deadline       DateTime?     // Expiration date for job postings
+  isHidden       Boolean       @default(false) // Toggle to hide/archive postings
+  applications   Application[]
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+}
+
+model Candidate {
+  id                String        @id @default(cuid())
+  userId            String?       @unique // Linked user account (if applicant registers/logs in)
+  user              User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+  fullName          String
+  email             String        @unique
+  phone             String
+  location          String
+  department        String
+  professionalTitle String
+  yearsOfExperience Int           @default(0)
+  bioSummary        String?       @db.Text
+  applications      Application[]
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+}
+
+model Application {
+  id                String            @id @default(cuid())
+  jobId             String
+  candidateId       String
+  job               JobPosting        @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  candidate         Candidate         @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  documentsUrl      String            // Single PDF (Resume + Certificates merged)
+  parsedText        String?           @db.Text
+  extractedSkills   String[]
+  yearsOfExperience Int               @default(0)
+  status            ApplicationStatus @default(SUBMITTED)
+  scoreResult       ScoreResult?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  @@unique([jobId, candidateId])
+  @@index([jobId, status])
+}
+
+model ScoreResult {
+  id            String      @id @default(cuid())
+  applicationId String      @unique
+  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  overallScore  Float
+  matchRating   MatchRating
+  yearsExpFound Int
+  skillsMatched String[]
+  missingSkills String[]
+  summary       String?     @db.Text
+  createdAt     DateTime    @default(now())
+}

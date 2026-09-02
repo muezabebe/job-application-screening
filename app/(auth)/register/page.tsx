@@ -40,7 +40,7 @@ export default function RegisterPage() {
       if (signInRes?.error) {
         router.push("/login?registered=true");
       } else {
-        router.push("/dashboard");
+        router.push("/applications");
         router.refresh();
       }
     } catch (err: any) {

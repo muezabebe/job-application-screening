@@ -118,7 +118,7 @@ export async function submitApplication(jobId: string, formData: FormData) {
       },
     });
 
-    revalidatePath("/dashboard");
+    revalidatePath("/applications");
     return { success: true };
   } catch (error: any) {
     console.error("Submission error:", error);

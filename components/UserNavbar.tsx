@@ -23,7 +23,7 @@ export default function UserNavbar({ user }: UserNavbarProps) {
               Explore Careers
             </Link>
             {user && (
-              <Link href="/dashboard" className="hover:text-zinc-900 transition-colors">
+              <Link href="/applications" className="hover:text-zinc-900 transition-colors">
                 My Applications
               </Link>
             )}

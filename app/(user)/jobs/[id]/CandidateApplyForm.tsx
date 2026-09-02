@@ -86,7 +86,7 @@ export default function CandidateApplyForm({
         !formData.professionalTitle.trim() ||
         formData.yearsOfExperience === ""
       ) {
-        setFormStatus({ type: "error", message: "All contact fields are required." })
+        setFormStatus({ type: "error", message: "All fields are required." })
         return false
       }
 
@@ -102,7 +102,7 @@ export default function CandidateApplyForm({
 
     if (currentStep === 2) {
       if (!formData.expectedSalary || !formData.noticePeriodDays || !formData.workPreference) {
-        setFormStatus({ type: "error", message: "All fields in Step 2 are required." })
+        setFormStatus({ type: "error", message: "All fields are required." })
         return false
       }
     }

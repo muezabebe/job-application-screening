@@ -41,7 +41,7 @@ function LoginForm() {
       } else if (role === "ADMIN") {
         router.push("/admin");
       } else {
-        router.push("/dashboard");
+        router.push("/applications");
       }
 
       router.refresh();

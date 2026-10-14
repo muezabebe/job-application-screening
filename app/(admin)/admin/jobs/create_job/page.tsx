@@ -73,7 +73,7 @@ export default function AdminCreateJobPage() {
       <form action={formAction} className="flex flex-col gap-4">
         {/* Job Title */}
         <div>
-          <label className="block text-sm font-medium mb-1">Job Title</label>
+          <label className="block text-sm font-medium mb-1">Job Title *</label>
           <input
             name="title"
             required
@@ -212,7 +212,7 @@ export default function AdminCreateJobPage() {
 
         {/* Min Years Experience */}
         <div>
-          <label className="block text-sm font-medium mb-1">Min Years Experience</label>
+          <label className="block text-sm font-medium mb-1">Min Years Experience *</label>
           <input
             type="number"
             name="minYearsExp"
@@ -224,7 +224,7 @@ export default function AdminCreateJobPage() {
         {/* Required Skills */}
         <div>
           <label className="block text-sm font-medium mb-1">
-            Required Skills (Comma separated)
+            Required Skills * (Comma separated)
           </label>
           <input
             name="requiredSkills"
@@ -235,7 +235,7 @@ export default function AdminCreateJobPage() {
 
         {/* Job Description */}
         <div>
-          <label className="block text-sm font-medium mb-1">Job Description</label>
+          <label className="block text-sm font-medium mb-1">Job Description *</label>
           <textarea
             name="description"
             required

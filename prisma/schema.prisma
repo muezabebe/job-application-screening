@@ -23,6 +23,9 @@ enum ApplicationStatus {
   INTERVIEWING   // Currently going through live interview rounds
   HIRED          // PASSED: Candidate successfully accepted the job offer!
   REJECTED       // FAILED: Process ended; not selected for the role
+  RESERVE_1      // Reserved round 1
+  RESERVE_2     // Reserved round 2
+  RESERVE_3     // Reserved round 3
 }
 
 enum MatchRating {
@@ -100,14 +103,16 @@ model Application {
 }
 
 model ScoreResult {
-  id            String      @id @default(cuid())
-  applicationId String      @unique
-  application   Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
-  overallScore  Float
-  matchRating   MatchRating
-  yearsExpFound Int
-  skillsMatched String[]
-  missingSkills String[]
-  summary       String?     @db.Text
-  createdAt     DateTime    @default(now())
+  id              String      @id @default(cuid())
+  applicationId   String      @unique
+  application     Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  matchRating     MatchRating
+  skillsMatched   String[]
+  missingSkills   String[]
+  summary         String?     @db.Text
+  technicalScore  Float?
+  behavioralScore Float?
+  
+  createdAt       DateTime    @default(now())
 }
+

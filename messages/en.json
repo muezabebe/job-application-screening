@@ -1,0 +1,12 @@
+
+{
+  "Admin": {
+    "dashboard": "Admin Dashboard",
+    "totalApplications": "Total Applications"
+  },
+  "ApplicationsTable": {
+    "name": "Applicant Name",
+    "status": "Status",
+    "actions": "Actions"
+  }
+}

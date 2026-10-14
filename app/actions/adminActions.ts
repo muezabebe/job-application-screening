@@ -5,7 +5,6 @@ import prisma from "@/lib/prisma"
 import { auth } from "@/app/auth"
 import { revalidatePath } from "next/cache"
 import { ApplicationStatus } from "@prisma/client"
-
 // Define and export the FormState type
 export type FormState = {
   success?: boolean
@@ -307,5 +306,38 @@ export async function adminDeleteApplication(applicationId: string): Promise<For
       success: false,
       error: error instanceof Error ? error.message : "Failed to delete application.",
     }
+  }
+}
+ 
+//score Result update function for admin to update technical and behavioral scores
+
+export async function updateApplicationScore(
+  applicationId: string,
+  fieldName: "technicalScore" | "behavioralScore",
+  value: number | null
+) {
+  try {
+    // Upsert directly into PostgreSQL matching your specific schema parameters
+    await prisma.scoreResult.upsert({
+      where: { applicationId },
+      update: {
+        [fieldName]: value
+      },
+      create: {
+        applicationId,
+        [fieldName]: value,
+        matchRating: "MEDIUM", // Ensure this fallback string matches your explicit MatchRating enum definition
+        skillsMatched: [],
+        missingSkills: [],
+        summary: "Manual profile metrics initialized by reviewer."
+      }
+    })
+
+    // Bust the layout route cache cache layer to synchronize mutations across panels
+    revalidatePath("/admin/applications")
+    return { success: true }
+  } catch (error: any) {
+    console.error("Score entry synchronization crashed:", error)
+    return { success: false, error: error.message }
   }
 }

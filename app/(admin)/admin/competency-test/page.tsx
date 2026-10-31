@@ -1,8 +1,8 @@
-
 import prisma from "@/lib/prisma";
 import { CompetencyTestList } from "./_components/CompetencyTestList";
 
 export default async function CompetencyTestsPage() {
+  // Fetch all competency tests
   const tests = await prisma.competencyTest.findMany({
     include: {
       _count: {
@@ -11,6 +11,21 @@ export default async function CompetencyTestsPage() {
           assignments: true,
         },
       },
+    },
+    orderBy: {
+      createdAt: "desc",
+    },
+  });
+
+  // Fetch available job postings
+  const jobs = await prisma.jobPosting.findMany({
+    where: {
+      isHidden: false,
+    },
+    select: {
+      id: true,
+      title: true,
+      departments: true,
     },
     orderBy: {
       createdAt: "desc",
@@ -29,7 +44,7 @@ export default async function CompetencyTestsPage() {
         </p>
       </div>
 
-      <CompetencyTestList tests={tests} />
+      <CompetencyTestList tests={tests} jobs={jobs} />
     </div>
   );
 }

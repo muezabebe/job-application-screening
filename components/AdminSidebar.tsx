@@ -4,6 +4,18 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import LogoutButton from "@/components/LogoutButton";
+import {
+  LayoutDashboard,
+  BriefcaseBusiness,
+  ClipboardList,
+  Users,
+  FileCheck,
+  MonitorCheck,
+  UserCog,
+  Zap,
+  Globe,
+  LogOut,
+} from "lucide-react";
 
 interface AdminSidebarProps {
   user?: {
@@ -16,15 +28,36 @@ const navigation = [
   {
     title: "OVERVIEW",
     links: [
-      { label: "Dashboard", href: "/admin", icon: "📊" },
+      {
+        label: "Dashboard",
+        href: "/admin",
+        icon: LayoutDashboard,
+      },
     ],
   },
   {
     title: "RECRUITMENT",
     links: [
-      { label: "Manage Jobs", href: "/admin/jobs", icon: "💼" },
-      { label: "Applications", href: "/admin/applications", icon: "📋" },
-      { label: "Candidates", href: "/admin/candidates", icon: "👥" },
+      {
+        label: "Manage Jobs",
+        href: "/admin/jobs",
+        icon: BriefcaseBusiness,
+      },
+      {
+        label: "Applications",
+        href: "/admin/applications",
+        icon: ClipboardList,
+      },
+      {
+        label: "Candidates",
+        href: "/admin/candidates",
+        icon: Users,
+      },
+      {
+        label: "Users",
+        href: "/admin/users",
+        icon: UserCog,
+      },
     ],
   },
   {
@@ -33,12 +66,12 @@ const navigation = [
       {
         label: "Manual Assessment",
         href: "/admin/competency-test/manual-assessment",
-        icon: "📝",
+        icon: FileCheck,
       },
       {
         label: "Online Tests",
         href: "/admin/competency-test",
-        icon: "💻",
+        icon: MonitorCheck,
       },
     ],
   },
@@ -48,24 +81,41 @@ export default function AdminSidebar({ user }: AdminSidebarProps) {
   const pathname = usePathname();
 
   const isActive = (href: string) => {
-    if (href === "/admin") return pathname === "/admin";
+    if (href === "/admin") {
+      return pathname === "/admin";
+    }
+
+    // Avoid marking Online Tests active on Manual Assessment pages.
+    if (href === "/admin/competency-test") {
+      return (
+        pathname === href ||
+        (pathname.startsWith(`${href}/`) &&
+          !pathname.startsWith(`${href}/manual-assessment`))
+      );
+    }
+
     return pathname === href || pathname.startsWith(`${href}/`);
   };
 
+  const userInitial = (user?.name || user?.email || "A")
+    .charAt(0)
+    .toUpperCase();
+
   return (
-    <aside className="hidden md:flex min-h-screen w-64 shrink-0 flex-col justify-between border-r border-zinc-800 bg-zinc-950 px-4 py-6 text-zinc-400">
+    <aside className="hidden min-h-screen w-64 shrink-0 flex-col justify-between border-r border-zinc-800 bg-zinc-950 px-4 py-6 text-zinc-400 md:flex">
       <div className="space-y-9">
         {/* Brand */}
         <div className="px-3">
           <div className="flex items-center gap-3">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-600 text-lg shadow-lg shadow-blue-600/20">
-              ⚡
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-blue-600 text-white shadow-lg shadow-blue-600/20">
+              <Zap size={21} />
             </div>
 
             <div>
               <h2 className="text-base font-bold tracking-wide text-white">
                 Control Panel
               </h2>
+
               <p className="mt-0.5 text-[10px] font-semibold uppercase tracking-[0.15em] text-zinc-500">
                 Admin Workspace
               </p>
@@ -84,20 +134,28 @@ export default function AdminSidebar({ user }: AdminSidebarProps) {
               <div className="space-y-1">
                 {section.links.map((item) => {
                   const active = isActive(item.href);
+                  const Icon = item.icon;
 
                   return (
                     <Link
                       key={item.href}
                       href={item.href}
-                      className={`group flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-all duration-200 ${
+                      aria-current={active ? "page" : undefined}
+                      className={`group flex items-center gap-3 rounded-lg border px-3 py-2.5 text-sm font-medium transition-all duration-200 ${
                         active
-                          ? "border border-blue-500/20 bg-blue-500/10 text-blue-400 shadow-sm"
-                          : "border border-transparent text-zinc-400 hover:bg-zinc-800/70 hover:text-white"
+                          ? "border-blue-500/20 bg-blue-500/10 text-blue-400 shadow-sm"
+                          : "border-transparent text-zinc-400 hover:bg-zinc-800/70 hover:text-white"
                       }`}
                     >
-                      <span className="text-base opacity-90">
-                        {item.icon}
-                      </span>
+                      <Icon
+                        size={18}
+                        strokeWidth={1.8}
+                        className={`shrink-0 transition-colors ${
+                          active
+                            ? "text-blue-400"
+                            : "text-zinc-500 group-hover:text-white"
+                        }`}
+                      />
 
                       <span className="flex-1">{item.label}</span>
 
@@ -118,13 +176,14 @@ export default function AdminSidebar({ user }: AdminSidebarProps) {
         <div className="rounded-xl border border-zinc-800 bg-zinc-900/70 p-3">
           <div className="mb-3 flex items-center gap-3">
             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-zinc-800 text-sm font-bold text-blue-400">
-              {(user?.name || "A").charAt(0).toUpperCase()}
+              {userInitial}
             </div>
 
             <div className="min-w-0">
               <p className="truncate text-xs font-semibold text-white">
                 {user?.name || "Admin User"}
               </p>
+
               <p className="truncate text-[11px] text-zinc-500">
                 {user?.email || "Administrator"}
               </p>
@@ -134,12 +193,14 @@ export default function AdminSidebar({ user }: AdminSidebarProps) {
           <div className="flex items-center justify-between border-t border-zinc-800 pt-3">
             <Link
               href="/jobs"
-              className="text-xs font-medium text-zinc-400 transition-colors hover:text-white"
+              className="flex items-center gap-1.5 text-xs font-medium text-zinc-400 transition-colors hover:text-white"
             >
-              ← Live Site
+              <Globe size={14} />
+              Live Site
             </Link>
 
-            <LogoutButton className="cursor-pointer border-none bg-transparent p-0 text-xs font-semibold text-rose-400 transition-colors hover:bg-transparent hover:text-rose-300">
+            <LogoutButton className="flex cursor-pointer items-center gap-1.5 border-none bg-transparent p-0 text-xs font-semibold text-rose-400 transition-colors hover:bg-transparent hover:text-rose-300">
+              <LogOut size={14} />
               Sign Out
             </LogoutButton>
           </div>

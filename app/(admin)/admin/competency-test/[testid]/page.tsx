@@ -1,9 +1,11 @@
-
 import prisma from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import Link from "next/link";
+
 import CreateQuestionForm from "./_components/CreateQuestionForm";
 import DeleteQuestionButton from "./_components/DeleteQuestionButton";
+import { EditTestForm } from "../_components/EditTestForm";
+import AssignTestForm from "../_components/AssignTestForm";
 
 interface TestDetailsPageProps {
   params: Promise<{
@@ -14,11 +16,19 @@ interface TestDetailsPageProps {
 export default async function TestDetailsPage({
   params,
 }: TestDetailsPageProps) {
+  // =====================================================
+  // 1. GET AND VALIDATE TEST ID
+  // =====================================================
+
   const { testid } = await params;
 
   if (!testid?.trim()) {
     notFound();
   }
+
+  // =====================================================
+  // 2. FETCH COMPETENCY TEST DETAILS
+  // =====================================================
 
   const test = await prisma.competencyTest.findUnique({
     where: {
@@ -33,6 +43,17 @@ export default async function TestDetailsPage({
           options: true,
         },
       },
+
+      // Fetch connected job postings
+      jobs: {
+        select: {
+          id: true,
+          title: true,
+          departments: true,
+        },
+      },
+
+      // Count assignments
       _count: {
         select: {
           assignments: true,
@@ -45,7 +66,33 @@ export default async function TestDetailsPage({
     notFound();
   }
 
+  // =====================================================
+  // 3. FETCH AVAILABLE JOB POSTINGS
+  // =====================================================
+
+  const jobs = await prisma.jobPosting.findMany({
+    where: {
+      isHidden: false,
+    },
+    select: {
+      id: true,
+      title: true,
+      departments: true,
+    },
+    orderBy: {
+      createdAt: "desc",
+    },
+  });
+
+  // =====================================================
+  // 4. CHECK EXISTING ASSIGNMENTS
+  // =====================================================
+
   const hasAssignments = test._count.assignments > 0;
+
+  // =====================================================
+  // 5. RENDER PAGE
+  // =====================================================
 
   return (
     <main className="mx-auto max-w-7xl space-y-6 p-6">
@@ -57,12 +104,28 @@ export default async function TestDetailsPage({
         ← Back to Competency Tests
       </Link>
 
-      {/* Test Header */}
+      {/* Edit Test Settings */}
+      <EditTestForm
+        test={{
+          id: test.id,
+          title: test.title,
+          description: test.description,
+          duration: test.duration,
+          status: test.status,
+          jobs: test.jobs.map((job) => ({
+            id: job.id,
+          })),
+        }}
+        jobs={jobs}
+      />
+
+      {/* =====================================================
+          TEST HEADER
+      ===================================================== */}
+
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-zinc-900">
-            {test.title}
-          </h1>
+          <h1 className="text-2xl font-bold text-zinc-900">{test.title}</h1>
 
           <p className="mt-2 text-sm text-zinc-500">
             {test.description || "No description provided."}
@@ -74,15 +137,18 @@ export default async function TestDetailsPage({
             test.status === "PUBLISHED"
               ? "bg-green-100 text-green-700"
               : test.status === "ARCHIVED"
-              ? "bg-zinc-100 text-zinc-600"
-              : "bg-amber-100 text-amber-700"
+                ? "bg-zinc-100 text-zinc-600"
+                : "bg-amber-100 text-amber-700"
           }`}
         >
           {test.status}
         </span>
       </div>
 
-      {/* Test Statistics */}
+      {/* =====================================================
+          TEST STATISTICS
+      ===================================================== */}
+
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
         <div className="rounded-lg border bg-white p-4">
           <p className="text-sm text-zinc-500">Duration</p>
@@ -106,12 +172,46 @@ export default async function TestDetailsPage({
         </div>
       </div>
 
-      {/* Questions */}
+      {/* =====================================================
+          CONNECTED JOB POSTINGS
+      ===================================================== */}
+
+      <section className="rounded-lg border bg-white p-5">
+        <h2 className="text-lg font-semibold text-zinc-900">
+          Connected Job Postings
+        </h2>
+
+        {test.jobs.length === 0 ? (
+          <p className="mt-3 rounded-lg bg-amber-50 p-4 text-sm text-amber-700">
+            This test is not connected to any job posting. Connect at least one
+            job using the settings above.
+          </p>
+        ) : (
+          <div className="mt-3 flex flex-wrap gap-2">
+            {test.jobs.map((job) => (
+              <span
+                key={job.id}
+                className="rounded-full bg-blue-50 px-3 py-1.5 text-sm font-medium text-blue-700"
+              >
+                {job.title}
+              </span>
+            ))}
+          </div>
+        )}
+
+        <p className="mt-3 text-xs text-zinc-500">
+          Applicants who apply for connected jobs automatically receive this
+          test when it is published.
+        </p>
+      </section>
+
+      {/* =====================================================
+          QUESTIONS
+      ===================================================== */}
+
       <section className="rounded-lg border bg-white p-5">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="text-lg font-semibold text-zinc-900">
-            Questions
-          </h2>
+          <h2 className="text-lg font-semibold text-zinc-900">Questions</h2>
 
           <span className="text-sm text-zinc-500">
             {test.questions.length} total
@@ -135,17 +235,13 @@ export default async function TestDetailsPage({
                   </p>
 
                   <p className="mt-1 text-xs text-zinc-500">
-                    {question.type.replace("_", " ")} ·{" "}
-                    {question.points} points
+                    {question.type.replace("_", " ")} · {question.points} points
                   </p>
 
                   {question.options.length > 0 && (
                     <ul className="mt-2 space-y-1">
                       {question.options.map((option) => (
-                        <li
-                          key={option.id}
-                          className="text-sm text-zinc-600"
-                        >
+                        <li key={option.id} className="text-sm text-zinc-600">
                           • {option.text}
                         </li>
                       ))}
@@ -160,16 +256,20 @@ export default async function TestDetailsPage({
             ))}
           </div>
         )}
+        {test.status === "PUBLISHED" && <AssignTestForm testId={test.id} />}
       </section>
 
-      {/* Add Question */}
+      {/* =====================================================
+          ADD QUESTION
+      ===================================================== */}
+
       {!hasAssignments ? (
         <CreateQuestionForm testId={test.id} />
       ) : (
         <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
           <p className="text-sm text-amber-800">
-            Questions are locked because applicants have already been
-            assigned to this test.
+            Questions are locked because applicants have already been assigned
+            to this test.
           </p>
         </div>
       )}

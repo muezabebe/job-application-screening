@@ -1,9 +1,20 @@
+
 "use client";
 
 import { useState } from "react";
 import Link from "next/link";
 import { CreateTestForm } from "./CreateTestForm";
 import { DeleteTestButton } from "./DeleteTestButton";
+
+// =====================================================
+// TYPES
+// =====================================================
+
+interface JobOption {
+  id: string;
+  title: string;
+  departments: string[];
+}
 
 interface CompetencyTestListProps {
   tests: {
@@ -18,19 +29,33 @@ interface CompetencyTestListProps {
       assignments: number;
     };
   }[];
+
+  jobs: JobOption[];
 }
 
-export function CompetencyTestList({ tests }: CompetencyTestListProps) {
+// =====================================================
+// COMPETENCY TEST LIST COMPONENT
+// =====================================================
+
+export function CompetencyTestList({
+  tests,
+  jobs,
+}: CompetencyTestListProps) {
   const [showForm, setShowForm] = useState(false);
 
   return (
     <div className="space-y-6">
-      {/* Header */}
+
+      {/* =====================================================
+          HEADER
+      ===================================================== */}
+
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <h2 className="text-lg font-semibold text-zinc-900">
             Available Tests
           </h2>
+
           <p className="text-sm text-zinc-500">
             {tests.length} test{tests.length !== 1 ? "s" : ""} created
           </p>
@@ -44,18 +69,24 @@ export function CompetencyTestList({ tests }: CompetencyTestListProps) {
         </button>
       </div>
 
-      {/* Create Form */}
+      {/* =====================================================
+          CREATE TEST FORM
+      ===================================================== */}
+
       {showForm && (
         <div className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm">
           <h3 className="mb-4 font-semibold text-zinc-900">
             Create Competency Test
           </h3>
 
-          <CreateTestForm />
+          <CreateTestForm jobs={jobs} />
         </div>
       )}
 
-      {/* Test List */}
+      {/* =====================================================
+          TEST LIST
+      ===================================================== */}
+
       {tests.length === 0 ? (
         <div className="rounded-xl border border-dashed border-zinc-300 bg-white px-6 py-16 text-center">
           <div className="mb-3 text-3xl">📝</div>
@@ -75,15 +106,21 @@ export function CompetencyTestList({ tests }: CompetencyTestListProps) {
               key={test.id}
               className="rounded-xl border border-zinc-200 bg-white p-5 shadow-sm transition hover:border-blue-300 hover:shadow-md"
             >
+
+              {/* Test Header */}
               <div className="mb-4 flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <h3 className="font-semibold text-zinc-900">{test.title}</h3>
+                  <h3 className="font-semibold text-zinc-900">
+                    {test.title}
+                  </h3>
 
                   <p className="mt-1 text-xs text-zinc-500">
-                    Created {new Date(test.createdAt).toLocaleDateString()}
+                    Created{" "}
+                    {new Date(test.createdAt).toLocaleDateString()}
                   </p>
                 </div>
 
+                {/* Test Status */}
                 <span
                   className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase ${
                     test.status === "PUBLISHED"
@@ -97,37 +134,50 @@ export function CompetencyTestList({ tests }: CompetencyTestListProps) {
                 </span>
               </div>
 
+              {/* Test Description */}
               <p className="mb-5 line-clamp-2 min-h-10 text-sm text-zinc-500">
                 {test.description || "No description provided."}
               </p>
 
+              {/* Test Statistics */}
               <div className="grid grid-cols-3 gap-2 border-t border-zinc-100 pt-4">
+
                 <div>
                   <p className="text-lg font-bold text-zinc-900">
                     {test.duration}
                   </p>
-                  <p className="text-[11px] text-zinc-500">Minutes</p>
+                  <p className="text-[11px] text-zinc-500">
+                    Minutes
+                  </p>
                 </div>
 
                 <div>
                   <p className="text-lg font-bold text-zinc-900">
                     {test._count.questions}
                   </p>
-                  <p className="text-[11px] text-zinc-500">Questions</p>
+                  <p className="text-[11px] text-zinc-500">
+                    Questions
+                  </p>
                 </div>
 
                 <div>
                   <p className="text-lg font-bold text-zinc-900">
                     {test._count.assignments}
                   </p>
-                  <p className="text-[11px] text-zinc-500">Assigned</p>
+                  <p className="text-[11px] text-zinc-500">
+                    Assigned
+                  </p>
                 </div>
+
               </div>
 
-              {/* Manage Test */}
+              {/* =====================================================
+                  TEST ACTIONS
+              ===================================================== */}
 
-              {/* Test Actions */}
               <div className="mt-5 flex flex-wrap items-center gap-2 border-t border-zinc-100 pt-4">
+
+                {/* Manage Test */}
                 <Link
                   href={`/admin/competency-test/${test.id}`}
                   className="flex-1 rounded-lg bg-blue-600 px-4 py-2.5 text-center text-sm font-semibold text-white transition hover:bg-blue-700"
@@ -135,7 +185,9 @@ export function CompetencyTestList({ tests }: CompetencyTestListProps) {
                   Manage Test →
                 </Link>
 
+                {/* Delete Test */}
                 <DeleteTestButton testId={test.id} />
+
               </div>
             </div>
           ))}

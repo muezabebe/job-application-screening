@@ -6,11 +6,11 @@ import { auth } from "@/app/auth";
 import { revalidatePath } from "next/cache";
 import {
   ApplicationStatus,
+  CompetencyTestStatus,
   MatchRating,
   Prisma,
-  CompetencyTestStatus,
+  QuestionType,
 } from "@prisma/client";
-import { QuestionType } from "@prisma/client";
 
 
 /* ============================================================================
@@ -38,14 +38,9 @@ export type ActionResult<T> = {
    AUTHORIZATION & HELPERS
    ============================================================================ */
 
-async function requireAdmin() {
-  const session = await auth();
+// ENSURE THE CURRENT SESSION BELONGS TO AN ADMINISTRATOR.
 
-  if (!session?.user || session.user.role !== "ADMIN") {
-    throw new Error("Unauthorized: Admin access required.");
-  }
-}
-
+// CONVERT DATABASE / RUNTIME ERRORS INTO USER-FACING MESSAGES.
 function getErrorMessage(
   error: unknown,
   fallback: string
@@ -67,6 +62,7 @@ function getErrorMessage(
   return error instanceof Error ? error.message : fallback;
 }
 
+// READ AND VALIDATE A REQUIRED STRING FROM FORM DATA.
 function requiredText(
   formData: FormData,
   field: string
@@ -80,6 +76,7 @@ function requiredText(
   return value.trim();
 }
 
+// VALIDATE A NON-NEGATIVE WHOLE NUMBER.
 function nonNegativeInteger(
   value: unknown,
   field: string
@@ -102,6 +99,7 @@ function nonNegativeInteger(
   return parsed;
 }
 
+// VALIDATE AND PARSE A YYYY-MM-DD DEADLINE.
 function parseDeadline(
   value: string | null
 ): Date | null {
@@ -125,6 +123,7 @@ function parseDeadline(
   return date;
 }
 
+// EXTRACT AND VALIDATE ALL JOB POSTING FORM FIELDS.
 function parseJobForm(formData: FormData) {
   const title = requiredText(formData, "title");
   const description = requiredText(formData, "description");
@@ -187,6 +186,7 @@ function parseJobForm(formData: FormData) {
   };
 }
 
+// REVALIDATE PAGES THAT DISPLAY JOB POSTINGS.
 function refreshJobPages() {
   revalidatePath("/admin");
   revalidatePath("/jobs");
@@ -637,26 +637,53 @@ export async function adminSearchCandidates(
     };
   }
 }
-//Competency test management
+/* ============================================================================
+   5. COMPETENCY TEST MANAGEMENT
+   ============================================================================ */
 
+// CREATE A COMPETENCY TEST AND CONNECT IT TO SELECTED JOB POSTINGS.
+// Tests start as DRAFT. Applicants are assigned manually by an admin
+// after the test is published.
 export async function createCompetencyTest(data: {
   title: string;
   description: string;
   duration: number;
+  jobIds: string[];
 }): Promise<ActionResult<undefined>> {
   try {
     await requireAdmin();
 
-    const title = data.title.trim();
-    const description = data.description.trim();
+    const title = data.title?.trim();
+    const description = data.description?.trim() ?? "";
     const duration = Number(data.duration);
+    const jobIds = [
+      ...new Set(
+        (Array.isArray(data.jobIds) ? data.jobIds : [])
+          .filter((id): id is string => typeof id === "string")
+          .map((id) => id.trim())
+          .filter(Boolean)
+      ),
+    ];
 
     if (!title) {
       throw new Error("Test title is required.");
     }
 
-    if (!Number.isInteger(duration) || duration <= 0) {
+    if (!Number.isInteger(duration) || duration < 1) {
       throw new Error("Duration must be a positive whole number.");
+    }
+
+    if (jobIds.length === 0) {
+      throw new Error("Connect this test to at least one job posting.");
+    }
+
+    const matchingJobs = await prisma.jobPosting.findMany({
+      where: { id: { in: jobIds } },
+      select: { id: true },
+    });
+
+    if (matchingJobs.length !== jobIds.length) {
+      throw new Error("One or more selected job postings could not be found.");
     }
 
     await prisma.competencyTest.create({
@@ -665,10 +692,14 @@ export async function createCompetencyTest(data: {
         description: description || null,
         duration,
         status: CompetencyTestStatus.DRAFT,
+        jobs: {
+          connect: jobIds.map((id) => ({ id })),
+        },
       },
     });
 
-    revalidatePath("/admin/competency-tests");
+    revalidatePath("/admin/competency-test");
+    revalidatePath("/admin");
 
     return { success: true };
   } catch (error) {
@@ -682,10 +713,102 @@ export async function createCompetencyTest(data: {
 }
 
 
+// UPDATE TEST DETAILS, STATUS, AND CONNECTED JOB POSTINGS.
+// The `jobs` relation is replaced with the selected job IDs.
+export async function updateCompetencyTest(data: {
+  id: string;
+  title: string;
+  description: string;
+  duration: number;
+  status: CompetencyTestStatus;
+  jobIds: string[];
+}): Promise<ActionResult<undefined>> {
+  try {
+    await requireAdmin();
+
+    const id = data.id?.trim();
+    const title = data.title?.trim();
+    const description = data.description?.trim() ?? "";
+    const jobIds = [
+      ...new Set(
+        (Array.isArray(data.jobIds) ? data.jobIds : [])
+          .filter((jobId): jobId is string => typeof jobId === "string")
+          .map((jobId) => jobId.trim())
+          .filter(Boolean)
+      ),
+    ];
+
+    if (!id) {
+      throw new Error("Test ID is required.");
+    }
+
+    if (!title) {
+      throw new Error("Test title is required.");
+    }
+
+    if (!Number.isInteger(data.duration) || data.duration < 1) {
+      throw new Error("Duration must be a positive whole number.");
+    }
+
+    if (!Object.values(CompetencyTestStatus).includes(data.status)) {
+      throw new Error("Invalid test status.");
+    }
+
+    if (jobIds.length === 0) {
+      throw new Error("Connect this test to at least one job posting.");
+    }
+
+    const existingTest = await prisma.competencyTest.findUnique({
+      where: { id },
+      select: { id: true },
+    });
+
+    if (!existingTest) {
+      throw new Error("Competency test not found.");
+    }
+
+    const matchingJobs = await prisma.jobPosting.findMany({
+      where: { id: { in: jobIds } },
+      select: { id: true },
+    });
+
+    if (matchingJobs.length !== jobIds.length) {
+      throw new Error("One or more selected job postings could not be found.");
+    }
+
+    await prisma.competencyTest.update({
+      where: { id },
+      data: {
+        title,
+        description: description || null,
+        duration: data.duration,
+        status: data.status,
+        jobs: {
+          set: jobIds.map((jobId) => ({ id: jobId })),
+        },
+      },
+    });
+
+    revalidatePath("/admin/competency-test");
+    revalidatePath(`/admin/competency-test/${id}`);
+    revalidatePath("/jobs");
+
+    return { success: true };
+  } catch (error) {
+    console.error("Failed to update competency test:", error);
+
+    return {
+      success: false,
+      error: getErrorMessage(error, "Failed to update competency test."),
+    };
+  }
+}
+
 /* ============================================================================
-   5. APPLICATION SCORING
+   6. APPLICATION SCORING
    ============================================================================ */
 
+// UPDATE OR CREATE THE MANUAL TECHNICAL / BEHAVIORAL SCORE.
 export async function updateApplicationScore(
   applicationId: string,
   fieldName: "technicalScore" | "behavioralScore",
@@ -756,8 +879,11 @@ export async function updateApplicationScore(
 }
 
 
-// For Creating a test question, we need to ensure that the question text is provided, the type is valid, and for multiple-choice or true/false questions, the options are correctly structured. We also need to ensure that the test exists before adding a question to it.
+/* ============================================================================
+   7. TEST QUESTION MANAGEMENT
+   ============================================================================ */
 
+// CREATE A QUESTION AND ITS ANSWER OPTIONS.
 export async function createTestQuestion(data: {
   testId: string;
   question: string;
@@ -856,7 +982,7 @@ export async function createTestQuestion(data: {
       },
     });
 
-    revalidatePath(`/admin/competency-tests/${data.testId}`);
+    revalidatePath(`/admin/competency-test/${data.testId}`);
 
     return { success: true };
   } catch (error) {
@@ -870,8 +996,7 @@ export async function createTestQuestion(data: {
 }
 
 
-// For Deleting a test question, we need to ensure that the question exists and that the test has not been assigned to any applicants yet. If the test has assignments, we should prevent deletion to maintain data integrity.
-
+// DELETE A QUESTION ONLY WHEN THE TEST HAS NO ASSIGNMENTS.
 export async function deleteTestQuestion(
   questionId: string
 ): Promise<ActionResult<undefined>> {
@@ -909,7 +1034,7 @@ export async function deleteTestQuestion(
       where: { id: questionId },
     });
 
-    revalidatePath(`/admin/competency-tests/${question.testId}`);
+    revalidatePath(`/admin/competency-test/${question.testId}`);
 
     return { success: true };
   } catch (error) {
@@ -923,8 +1048,7 @@ export async function deleteTestQuestion(
 }
 
 
-//delete competency test
-
+// DELETE A TEST ONLY WHEN IT HAS NO APPLICANT ASSIGNMENTS.
 export async function deleteCompetencyTest(
   testId: string
 ): Promise<ActionResult<undefined>> {
@@ -967,6 +1091,339 @@ export async function deleteCompetencyTest(
     return {
       success: false,
       error: getErrorMessage(error, "Failed to delete competency test."),
+    };
+  }
+}
+/* ============================================================================
+   8. MANUAL COMPETENCY TEST ASSIGNMENT
+   ============================================================================ */
+
+interface AssignTestInput {
+  testId: string;
+  applicationIds: string[];
+}
+
+// Return only applicants who applied for a job connected to this test.
+// The test must already be published, and existing assignments are excluded.
+export async function getEligibleApplicants(testId: string) {
+  await requireAdmin();
+
+  const validTestId =
+    typeof testId === "string" ? testId.trim() : "";
+
+  if (!validTestId) {
+    throw new Error("A valid competency test ID is required.");
+  }
+
+  const test = await prisma.competencyTest.findUnique({
+    where: { id: validTestId },
+    select: {
+      id: true,
+      status: true,
+      jobs: {
+        select: { id: true },
+      },
+    },
+  });
+
+  if (!test) {
+    throw new Error("Competency test not found.");
+  }
+
+  if (test.status !== CompetencyTestStatus.PUBLISHED) {
+    throw new Error("Only published tests can be assigned.");
+  }
+
+  const jobIds = test.jobs.map((job) => job.id);
+
+  if (jobIds.length === 0) {
+    return [];
+  }
+
+  return prisma.application.findMany({
+    where: {
+      jobId: { in: jobIds },
+      testAssignments: {
+        none: {
+          testId: validTestId,
+        },
+      },
+    },
+    select: {
+      id: true,
+      candidate: {
+        select: {
+          id: true,
+          fullName: true,
+          email: true,
+        },
+      },
+      job: {
+        select: {
+          id: true,
+          title: true,
+        },
+      },
+    },
+    orderBy: {
+      createdAt: "desc",
+    },
+  });
+}
+
+// Assign a published test to selected applications.
+// Eligibility is checked again inside the transaction so that a client
+// cannot submit application IDs belonging to unrelated job postings.
+export async function assignCompetencyTest(input: AssignTestInput) {
+  try {
+    await requireAdmin();
+
+    const testId =
+      typeof input?.testId === "string" ? input.testId.trim() : "";
+
+    if (!testId) {
+      throw new Error("A valid competency test ID is required.");
+    }
+
+    if (
+      !Array.isArray(input?.applicationIds) ||
+      input.applicationIds.length === 0
+    ) {
+      throw new Error("Select at least one applicant.");
+    }
+
+    const applicationIds = [
+      ...new Set(
+        input.applicationIds
+          .filter((id): id is string => typeof id === "string")
+          .map((id) => id.trim())
+          .filter(Boolean)
+      ),
+    ];
+
+    if (applicationIds.length === 0) {
+      throw new Error("Select at least one valid applicant.");
+    }
+
+    if (applicationIds.length !== input.applicationIds.length) {
+      throw new Error("The selected applicant list contains invalid entries.");
+    }
+
+    await prisma.$transaction(async (tx) => {
+      const test = await tx.competencyTest.findUnique({
+        where: { id: testId },
+        select: {
+          id: true,
+          status: true,
+          jobs: {
+            select: { id: true },
+          },
+        },
+      });
+
+      if (!test) {
+        throw new Error("Competency test not found.");
+      }
+
+      if (test.status !== CompetencyTestStatus.PUBLISHED) {
+        throw new Error("Only published tests can be assigned.");
+      }
+
+      const jobIds = test.jobs.map((job) => job.id);
+
+      if (jobIds.length === 0) {
+        throw new Error("No job postings are connected to this test.");
+      }
+
+      const eligibleApplications = await tx.application.findMany({
+        where: {
+          id: { in: applicationIds },
+          jobId: { in: jobIds },
+          testAssignments: {
+            none: { testId },
+          },
+        },
+        select: { id: true },
+      });
+
+      if (eligibleApplications.length !== applicationIds.length) {
+        throw new Error(
+          "One or more selected applicants are not eligible or have already been assigned."
+        );
+      }
+
+      const result = await tx.testAssignment.createMany({
+        data: eligibleApplications.map((application) => ({
+          testId,
+          applicationId: application.id,
+        })),
+        skipDuplicates: true,
+      });
+
+      if (result.count !== eligibleApplications.length) {
+        throw new Error(
+          "Some assignments could not be created. Refresh the page and try again."
+        );
+      }
+    });
+
+    revalidatePath("/admin/competency-test");
+    revalidatePath(`/admin/competency-test/${testId}`);
+    revalidatePath("/admin/applications");
+
+    return {
+      success: true,
+      message: "Competency test assigned successfully.",
+    };
+  } catch (error) {
+    console.error("Failed to assign competency test:", error);
+
+    return {
+      success: false,
+      message: getErrorMessage(
+        error,
+        "Failed to assign competency test."
+      ),
+    };
+  }
+}
+
+
+
+/* User management*/
+
+
+type UserRole = "ADMIN" | "APPLICANT";
+type UserStatus = "ACTIVE" | "INACTIVE";
+
+async function requireAdmin() {
+  const session = await auth();
+
+  if (!session?.user?.id || session.user.role !== "ADMIN") {
+    throw new Error("Unauthorized. Administrator access required.");
+  }
+
+  return session.user;
+}
+
+export async function updateUserRole(
+  userId: string,
+  role: UserRole
+) {
+  try {
+    const admin = await requireAdmin();
+
+    if (!userId || !["ADMIN", "APPLICANT"].includes(role)) {
+      return { success: false, message: "Invalid user or role." };
+    }
+
+    if (userId === admin.id) {
+      return {
+        success: false,
+        message: "You cannot change your own administrator role.",
+      };
+    }
+
+    await prisma.$transaction(async (tx) => {
+      const target = await tx.user.findUnique({
+        where: { id: userId },
+        select: { id: true, role: true, status: true },
+      });
+
+      if (!target) throw new Error("User not found.");
+
+      if (
+        target.role === "ADMIN" &&
+        target.status === "ACTIVE" &&
+        role !== "ADMIN"
+      ) {
+        const activeAdmins = await tx.user.count({
+          where: { role: "ADMIN", status: "ACTIVE" },
+        });
+
+        if (activeAdmins <= 1) {
+          throw new Error("You cannot demote the last active administrator.");
+        }
+      }
+
+      await tx.user.update({
+        where: { id: userId },
+        data: { role },
+      });
+    });
+
+    revalidatePath("/admin/users");
+
+    return { success: true, message: "User role updated successfully." };
+  } catch (error) {
+    return {
+      success: false,
+      message:
+        error instanceof Error ? error.message : "Failed to update user role.",
+    };
+  }
+}
+
+export async function updateUserStatus(
+  userId: string,
+  status: UserStatus
+) {
+  try {
+    const admin = await requireAdmin();
+
+    if (!userId || !["ACTIVE", "INACTIVE"].includes(status)) {
+      return { success: false, message: "Invalid user or status." };
+    }
+
+    if (userId === admin.id) {
+      return {
+        success: false,
+        message: "You cannot deactivate your own account.",
+      };
+    }
+
+    await prisma.$transaction(async (tx) => {
+      const target = await tx.user.findUnique({
+        where: { id: userId },
+        select: { id: true, role: true, status: true },
+      });
+
+      if (!target) throw new Error("User not found.");
+
+      if (
+        target.role === "ADMIN" &&
+        target.status === "ACTIVE" &&
+        status === "INACTIVE"
+      ) {
+        const activeAdmins = await tx.user.count({
+          where: { role: "ADMIN", status: "ACTIVE" },
+        });
+
+        if (activeAdmins <= 1) {
+          throw new Error("You cannot deactivate the last active administrator.");
+        }
+      }
+
+      await tx.user.update({
+        where: { id: userId },
+        data: { status },
+      });
+    });
+
+    revalidatePath("/admin/users");
+
+    return {
+      success: true,
+      message:
+        status === "ACTIVE"
+          ? "User account activated successfully."
+          : "User account deactivated successfully.",
+    };
+  } catch (error) {
+    return {
+      success: false,
+      message:
+        error instanceof Error ? error.message : "Failed to update account status.",
     };
   }
 }

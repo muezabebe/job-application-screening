@@ -1,164 +1,196 @@
-"use client"
 
-import { useState, useMemo, useTransition } from "react"
-import { adminUpdateApplicationStatus, adminDeleteApplication, updateApplicationScore } from "@/app/actions/adminActions"
-import { ApplicationStatus } from "@prisma/client"
-import { AdminSearchComponent } from "./Search"
-import { getStatusBadgeStyle } from "../utils/StatusBadge"
-import { getStaticDocumentUrl } from "../utils/path_file"
-import { ApplicationRow } from "./ApplicationRow"
+"use client";
+
+import { useEffect, useMemo, useState, useTransition } from "react";
+import {
+  adminUpdateApplicationStatus,
+  adminDeleteApplication,
+} from "@/app/actions/adminActions";
+import { ApplicationStatus } from "@prisma/client";
+import { AdminSearchComponent } from "./Search";
+import { getStatusBadgeStyle } from "../utils/StatusBadge";
+import { ApplicationRow } from "./ApplicationRow";
 
 interface ApplicationWithDetails {
-  id: string
-  documentsUrl?: string | null
-  status: string
-  yearsOfExperience?: number | null
-  createdAt: string | Date
+  id: string;
+  status: string;
+  yearsOfExperience?: number | null;
+  createdAt: string | Date;
   candidate: {
-    fullName: string
-    email: string
-    department?: string | null
-    yearsOfExperience?: number | null
-  }
+    fullName: string;
+    email: string;
+    yearsOfExperience?: number | null;
+  };
   job: {
-    title: string
-    departments?: string[] | null
-  }
+    title: string;
+  };
   scoreResult?: {
-    technicalScore?: number | null
-    behavioralScore?: number | null
-  } | null  
+    technicalScore?: number | null;
+    behavioralScore?: number | null;
+  } | null;
 }
 
 interface ApplicationsTableProps {
-  applications: ApplicationWithDetails[]
+  applications: ApplicationWithDetails[];
 }
 
-export function ApplicationsTable({ applications: initialApplications }: ApplicationsTableProps) {
-  const [applications, setApplications] = useState(initialApplications)
-  const [searchCandidate, setSearchCandidate] = useState("")
-  const [selectedJobTitle, setSelectedJobTitle] = useState("ALL")
-  const [minExperience, setMinExperience] = useState<number>(0)
-  const [isPending, startTransition] = useTransition()
+export function ApplicationsTable({
+  applications: initialApplications,
+}: ApplicationsTableProps) {
+  const [applications, setApplications] = useState(initialApplications);
+  const [searchCandidate, setSearchCandidate] = useState("");
+  const [selectedJobTitle, setSelectedJobTitle] = useState("ALL");
+  const [minExperience, setMinExperience] = useState(0);
+  const [isPending, startTransition] = useTransition();
 
-  const handleStatusChange = (applicationId: string, newStatus: string) => {
-    startTransition(async () => {
-      const res = await adminUpdateApplicationStatus(applicationId, newStatus as ApplicationStatus)
-      if (res?.success) {
-        setApplications((prev) =>
-          prev.map((app) => (app.id === applicationId ? { ...app, status: newStatus } : app))
-        )
-      } else if (res?.error) {
-        alert(res.error)
-      }
-    })
-  }
+  useEffect(() => {
+    setApplications(initialApplications);
+  }, [initialApplications]);
 
-  const handleDeleteApplication = (applicationId: string) => {
-    if (!confirm("Are you sure you want to delete this candidate application?")) return
-
-    startTransition(async () => {
-      const res = await adminDeleteApplication(applicationId)
-      if (res?.success) {
-        setApplications((prev) => prev.filter((app) => app.id !== applicationId))
-      } else if (res?.error) {
-        alert(res.error)
-      }
-    })
-  }
-
-  const handleScoreChange = async (
+  const handleStatusChange = (
     applicationId: string,
-    fieldName: "technicalScore" | "behavioralScore",
-    value: number | null
+    newStatus: string
   ) => {
-    if (value !== null && (value < 0 || value > 100)) {
-      alert("Evaluation parameters must consist of numbers tracking from 0 up to 100.")
-      return
+    if (
+      !Object.values(ApplicationStatus).includes(
+        newStatus as ApplicationStatus
+      )
+    ) {
+      alert("Invalid application status.");
+      return;
     }
 
     startTransition(async () => {
-      const result = await updateApplicationScore(applicationId, fieldName, value)
-      
-      if (result.success) {
-        setApplications((prev) =>
-          prev.map((app) => {
-            if (app.id === applicationId) {
-              const baseResult = app.scoreResult ?? { technicalScore: null, behavioralScore: null }
-              return {
-                ...app,
-                scoreResult: {
-                  ...baseResult,
-                  [fieldName]: value,
-                },
-              }
-            }
-            return app
-          })
-        )
-      } else if (result.error) {
-        alert(`Database write rejected: ${result.error}`)
+      const result = await adminUpdateApplicationStatus(
+        applicationId,
+        newStatus as ApplicationStatus
+      );
+
+      if (result?.success) {
+        setApplications((previous) =>
+          previous.map((app) =>
+            app.id === applicationId
+              ? { ...app, status: newStatus }
+              : app
+          )
+        );
+      } else {
+        alert(result?.error ?? "Failed to update status.");
       }
-    })
-  }
+    });
+  };
+
+  const handleDeleteApplication = (applicationId: string) => {
+    if (
+      !confirm("Are you sure you want to delete this application?")
+    ) return;
+
+    startTransition(async () => {
+      const result = await adminDeleteApplication(applicationId);
+
+      if (result?.success) {
+        setApplications((previous) =>
+          previous.filter((app) => app.id !== applicationId)
+        );
+      } else {
+        alert(result?.error ?? "Failed to delete application.");
+      }
+    });
+  };
 
   const availableJobTitles = useMemo(() => {
-    const titles = new Set<string>()
-    applications.forEach((app) => {
-      if (app.job?.title) {
-        titles.add(app.job.title)
-      }
-    })
-    return Array.from(titles)
-  }, [applications])
+    return [
+      ...new Set(
+        applications
+          .map((app) => app.job?.title)
+          .filter((title): title is string => Boolean(title))
+      ),
+    ].sort((a, b) => a.localeCompare(b));
+  }, [applications]);
 
   const filteredApplications = useMemo(() => {
+    const query = searchCandidate.trim().toLowerCase();
+
     return applications
       .filter((app) => {
-        const query = searchCandidate.toLowerCase().trim()
-        const matchesCandidateName = app.candidate.fullName.toLowerCase().includes(query)
-        const matchesJobTitle = selectedJobTitle === "ALL" || app.job?.title === selectedJobTitle
-        const exp = app.yearsOfExperience ?? app.candidate.yearsOfExperience ?? 0
-        const matchesExperience = exp >= minExperience
+        const name = app.candidate?.fullName?.toLowerCase() ?? "";
+        const email = app.candidate?.email?.toLowerCase() ?? "";
 
-        return matchesCandidateName && matchesJobTitle && matchesExperience
+        const experience =
+          app.yearsOfExperience ??
+          app.candidate?.yearsOfExperience ??
+          0;
+
+        const matchesSearch =
+          !query || name.includes(query) || email.includes(query);
+
+        const matchesJob =
+          selectedJobTitle === "ALL" ||
+          app.job?.title === selectedJobTitle;
+
+        return (
+          matchesSearch &&
+          matchesJob &&
+          experience >= minExperience
+        );
       })
       .sort((a, b) => {
-        const expA = a.yearsOfExperience ?? a.candidate.yearsOfExperience ?? 0
-        const expB = b.yearsOfExperience ?? b.candidate.yearsOfExperience ?? 0
-        return expB - expA
-      })
-  }, [applications, searchCandidate, selectedJobTitle, minExperience])
+        const experienceA =
+          a.yearsOfExperience ??
+          a.candidate?.yearsOfExperience ??
+          0;
+
+        const experienceB =
+          b.yearsOfExperience ??
+          b.candidate?.yearsOfExperience ??
+          0;
+
+        return experienceB - experienceA;
+      });
+  }, [
+    applications,
+    searchCandidate,
+    selectedJobTitle,
+    minExperience,
+  ]);
 
   return (
     <div className="space-y-4">
-      {/* Search component attached clean on top */}
-      <AdminSearchComponent />
+      <AdminSearchComponent
+        searchCandidate={searchCandidate}
+        setSearchCandidate={setSearchCandidate}
+        minExperience={minExperience}
+        setMinExperience={setMinExperience}
+        selectedJobTitle={selectedJobTitle}
+        setSelectedJobTitle={setSelectedJobTitle}
+        availableJobTitles={availableJobTitles}
+        resultCount={filteredApplications.length}
+        totalCount={applications.length}
+      />
 
-      {/* Applications Table Card Container with unified border lines */}
-      <div className="overflow-hidden border border-zinc-200 rounded-xl shadow-sm bg-white">
+      <div className="overflow-hidden rounded-xl border border-zinc-200 bg-white shadow-sm">
         <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse min-w-[1150px]">
+          <table className="w-full min-w-[850px] border-collapse text-left">
             <thead>
-              <tr className="border-b border-zinc-200 bg-zinc-50/70 text-[11px] font-bold text-zinc-400 uppercase tracking-wider select-none">
-                <th className="p-4 font-semibold">Candidate</th>
-                <th className="p-4 font-semibold">Job Position</th>
-                <th className="p-4 font-semibold">Experience</th>
-                <th className="p-4 font-semibold">Field of study</th>
-                <th className="p-4 w-24 font-semibold text-center">Tech (/100)</th>
-                <th className="p-4 w-24 font-semibold text-center">Behav (/100)</th>
-                <th className="p-4 w-24 font-semibold text-center">Overall</th>
-                <th className="p-4 font-semibold">Scanned Document</th>
-                <th className="p-4 font-semibold">Status</th>
-                <th className="p-4 font-semibold">Date</th>
-                <th className="p-4 text-right font-semibold">Actions</th>
+              <tr className="border-b border-zinc-200 bg-zinc-50/70 text-[11px] font-bold uppercase tracking-wider text-zinc-500">
+                <th className="p-4">Candidate</th>
+                <th className="p-4">Job Position</th>
+                <th className="p-4">Experience</th>
+                <th className="p-4 text-center">Overall Score</th>
+                <th className="p-4">Status</th>
+                <th className="p-4">Applied Date</th>
+                <th className="p-4 text-right">Actions</th>
               </tr>
             </thead>
+
             <tbody className="divide-y divide-zinc-100 text-xs text-zinc-600">
               {filteredApplications.length === 0 ? (
                 <tr>
-                  <td colSpan={11} className="p-12 text-center text-zinc-400 bg-zinc-50/20 font-medium italic">
-                    No applications matched your filter criteria.
+                  <td
+                    colSpan={7}
+                    className="p-12 text-center italic text-zinc-400"
+                  >
+                    No applications match your filters.
                   </td>
                 </tr>
               ) : (
@@ -168,9 +200,7 @@ export function ApplicationsTable({ applications: initialApplications }: Applica
                     app={app}
                     isPending={isPending}
                     getStatusBadgeStyle={getStatusBadgeStyle}
-                    getStaticDocumentUrl={getStaticDocumentUrl}
                     handleStatusChange={handleStatusChange}
-                    handleScoreChange={handleScoreChange}
                     handleDeleteApplication={handleDeleteApplication}
                   />
                 ))
@@ -178,7 +208,12 @@ export function ApplicationsTable({ applications: initialApplications }: Applica
             </tbody>
           </table>
         </div>
+
+        <div className="border-t border-zinc-200 px-4 py-3 text-xs text-zinc-500">
+          Showing {filteredApplications.length} of {applications.length} applications
+          {isPending && " · Saving changes..."}
+        </div>
       </div>
     </div>
-  )
+  );
 }

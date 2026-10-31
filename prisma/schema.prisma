@@ -16,16 +16,16 @@ enum UserRole {
 }
 
 enum ApplicationStatus {
-  SUBMITTED      // Application received by the system
-  UNDER_REVIEW   // Recruiter is evaluating the resume
-  SCREENED       // Passed initial screening (like an HR call or written test)
-  SHORTLISTED    // Handpicked as a top candidate for the role
-  INTERVIEWING   // Currently going through live interview rounds
-  HIRED          // PASSED: Candidate successfully accepted the job offer!
-  REJECTED       // FAILED: Process ended; not selected for the role
-  RESERVE_1      // Reserved round 1
-  RESERVE_2     // Reserved round 2
-  RESERVE_3     // Reserved round 3
+  SUBMITTED
+  UNDER_REVIEW
+  SCREENED
+  SHORTLISTED
+  INTERVIEWING
+  HIRED
+  REJECTED
+  RESERVE_1
+  RESERVE_2
+  RESERVE_3
 }
 
 enum MatchRating {
@@ -35,8 +35,31 @@ enum MatchRating {
   UNQUALIFIED
 }
 
+// Competency Test Enums
+
+enum QuestionType {
+  MULTIPLE_CHOICE
+  TRUE_FALSE
+  SHORT_ANSWER
+  ESSAY
+}
+
+enum CompetencyTestStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+enum TestAssignmentStatus {
+  ASSIGNED
+  IN_PROGRESS
+  SUBMITTED
+  GRADED
+  EXPIRED
+}
+
 // ==========================================
-// MODELS
+// EXISTING MODELS
 // ==========================================
 
 model User {
@@ -45,9 +68,9 @@ model User {
   email         String?    @unique
   emailVerified DateTime?
   image         String?
-  password      String?    // Hashed credentials password for recruiters/admins
+  password      String?
   role          UserRole   @default(APPLICANT)
-  candidate     Candidate? // 1-to-1 optional link to business profile if user is an applicant
+  candidate     Candidate?
   createdAt     DateTime   @default(now())
   updatedAt     DateTime   @updatedAt
 }
@@ -55,12 +78,12 @@ model User {
 model JobPosting {
   id             String        @id @default(cuid())
   title          String
-  departments    String[]      // Multi-department tagging: e.g. ["IT", "Engineering"]
+  departments    String[]
   description    String        @db.Text
   minYearsExp    Int           @default(0)
   requiredSkills String[]
-  deadline       DateTime?     // Expiration date for job postings
-  isHidden       Boolean       @default(false) // Toggle to hide/archive postings
+  deadline       DateTime?
+  isHidden       Boolean       @default(false)
   applications   Application[]
   createdAt      DateTime      @default(now())
   updatedAt      DateTime      @updatedAt
@@ -68,7 +91,7 @@ model JobPosting {
 
 model Candidate {
   id                String        @id @default(cuid())
-  userId            String?       @unique // Linked user account (if applicant registers/logs in)
+  userId            String?       @unique
   user              User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
   fullName          String
   email             String        @unique
@@ -89,12 +112,13 @@ model Application {
   candidateId       String
   job               JobPosting        @relation(fields: [jobId], references: [id], onDelete: Cascade)
   candidate         Candidate         @relation(fields: [candidateId], references: [id], onDelete: Cascade)
-  documentsUrl      String            // Single PDF (Resume + Certificates merged)
+  documentsUrl      String
   parsedText        String?           @db.Text
   extractedSkills   String[]
   yearsOfExperience Int               @default(0)
   status            ApplicationStatus @default(SUBMITTED)
   scoreResult       ScoreResult?
+  testAssignments   TestAssignment[]
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
 
@@ -112,7 +136,99 @@ model ScoreResult {
   summary         String?     @db.Text
   technicalScore  Float?
   behavioralScore Float?
-  
   createdAt       DateTime    @default(now())
 }
 
+// ==========================================
+// COMPETENCY TEST MODELS
+// ==========================================
+
+model CompetencyTest {
+  id          String               @id @default(cuid())
+  title       String
+  description String?              @db.Text
+  duration    Int
+  status      CompetencyTestStatus @default(DRAFT)
+
+  questions   TestQuestion[]
+  assignments TestAssignment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model TestQuestion {
+  id     String         @id @default(cuid())
+  testId String
+  test   CompetencyTest @relation(fields: [testId], references: [id], onDelete: Cascade)
+
+  question String       @db.Text
+  type     QuestionType
+  points   Float        @default(1)
+  order    Int
+
+  options TestOption[]
+  answers TestAnswer[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([testId, order])
+}
+
+model TestOption {
+  id         String       @id @default(cuid())
+  questionId String
+  question   TestQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+
+  text      String
+  isCorrect Boolean @default(false)
+
+  answers TestAnswer[]
+
+  createdAt DateTime @default(now())
+}
+
+model TestAssignment {
+  id            String @id @default(cuid())
+  testId        String
+  applicationId String
+
+  test        CompetencyTest @relation(fields: [testId], references: [id], onDelete: Cascade)
+  application Application    @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  status      TestAssignmentStatus @default(ASSIGNED)
+  assignedAt  DateTime             @default(now())
+  startedAt   DateTime?
+  submittedAt DateTime?
+  deadline    DateTime?
+
+  score   Float?
+  answers TestAnswer[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([testId, applicationId])
+}
+
+model TestAnswer {
+  id               String  @id @default(cuid())
+  assignmentId     String
+  questionId       String
+  selectedOptionId String?
+
+  assignment     TestAssignment @relation(fields: [assignmentId], references: [id], onDelete: Cascade)
+  question       TestQuestion   @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  selectedOption TestOption?    @relation(fields: [selectedOptionId], references: [id], onDelete: SetNull)
+
+  responseText  String?   @db.Text
+  pointsAwarded Float?
+  feedback      String?   @db.Text
+  gradedAt      DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([assignmentId, questionId])
+}

@@ -193,6 +193,41 @@ function refreshJobPages() {
   revalidatePath("/admin/applications");
 }
 
+/*============================================================================RequireAdmin=====================================*/
+
+
+async function requireAdmin() {
+  const session = await auth();
+
+  if (!session?.user?.id) {
+    throw new Error("Unauthorized. Please sign in.");
+  }
+
+  const admin = await prisma.user.findUnique({
+    where: {
+      id: session.user.id,
+    },
+    select: {
+      id: true,
+      role: true,
+      status: true,
+    },
+  });
+
+  if (
+    !admin ||
+    admin.role !== "ADMIN" ||
+    admin.status !== "ACTIVE"
+  ) {
+    throw new Error(
+      "Unauthorized. Active administrator access required."
+    );
+  }
+
+  return admin;
+}
+
+
 /* ============================================================================
    1. JOB POSTING CRUD
    ============================================================================ */
@@ -1295,16 +1330,6 @@ export async function assignCompetencyTest(input: AssignTestInput) {
 
 type UserRole = "ADMIN" | "APPLICANT";
 type UserStatus = "ACTIVE" | "INACTIVE";
-
-async function requireAdmin() {
-  const session = await auth();
-
-  if (!session?.user?.id || session.user.role !== "ADMIN") {
-    throw new Error("Unauthorized. Administrator access required.");
-  }
-
-  return session.user;
-}
 
 export async function updateUserRole(
   userId: string,
